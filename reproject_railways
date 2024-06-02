@@ -1,0 +1,50 @@
+import json
+from collections import defaultdict
+from geojson import Feature, FeatureCollection, LineString, dump
+from pyproj import Transformer
+
+# Define the input and output files
+input_file = 'raw_data//denmark_railways.geojson'
+output_files = {
+    'rail': 'denmark_railways.geojson',
+    'light_rail': 'denmark_light_railways.geojson'
+}
+
+# Initialize the transformer to convert from WGS84 (EPSG:4326) to UTM zone 32N (EPSG:25832)
+transformer = Transformer.from_crs("EPSG:4326", "EPSG:25832", always_xy=True)
+
+# Read the input GeoJSON file
+with open(input_file, 'r', encoding='utf-8') as f:
+    data = json.load(f)
+
+# Create a dictionary to hold the features for each railway type
+features_by_type = defaultdict(list)
+
+# Function to reproject coordinates
+def reproject_coords(coords):
+    return [transformer.transform(lon, lat) for lon, lat in coords]
+
+# Separate features based on railway type and reproject coordinates
+for feature in data['features']:
+    railway_type = feature['properties'].get('railway')
+    if railway_type in output_files:
+        features_by_type[railway_type].append(feature)
+
+# Reproject coordinates and write each railway type to a separate GeoJSON file
+for railway_type, features in features_by_type.items():
+    reprojected_features = []
+    for feature in features:
+        geometry = feature['geometry']
+        if geometry['type'] == 'LineString':
+            reprojected_coords = reproject_coords(geometry['coordinates'])
+            new_geometry = LineString(reprojected_coords)
+            reprojected_feature = Feature(geometry=new_geometry, properties=feature['properties'])
+            reprojected_features.append(reprojected_feature)
+    feature_collection = FeatureCollection(reprojected_features)
+    output_file = output_files.get(railway_type)
+    if output_file:
+        with open(output_file, 'w', encoding='utf-8') as f:
+            dump(feature_collection, f, ensure_ascii=False, indent=4)
+        print(f"Data for {railway_type} railways saved to {output_file} with {len(reprojected_features)} features")
+
+print("All railway data processed and saved.")

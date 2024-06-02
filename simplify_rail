@@ -1,0 +1,50 @@
+import json
+from geojson import Feature, FeatureCollection, LineString, dump
+from shapely.geometry import LineString as ShapelyLineString, MultiLineString
+from shapely.ops import linemerge, unary_union
+
+# Define the input and output files
+input_files = {
+    'rail': 'denmark_railways.geojson',
+    'light_rail': 'denmark_light_railways.geojson'
+}
+output_files = {
+    'rail': 'simplified_denmark_railways.geojson',
+    'light_rail': 'simplified_denmark_light_railways.geojson'
+}
+
+# Function to simplify geometries
+def simplify_geometries(features):
+    # Convert features to Shapely LineStrings
+    lines = [ShapelyLineString(feature['geometry']['coordinates']) for feature in features]
+    
+    # Merge lines
+    merged = linemerge(unary_union(lines))
+    
+    # If merged result is a single LineString, wrap it in a list
+    if isinstance(merged, ShapelyLineString):
+        merged = [merged]
+    # If merged result is a MultiLineString, convert it to a list of LineStrings
+    elif isinstance(merged, MultiLineString):
+        merged = merged.geoms
+    
+    return [Feature(geometry=LineString(line.coords), properties={}) for line in merged]
+
+# Read, simplify, and write each railway type to a separate GeoJSON file
+for railway_type, input_file in input_files.items():
+    with open(input_file, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+    
+    features = data['features']
+    
+    # Simplify geometries
+    simplified_features = simplify_geometries(features)
+    
+    feature_collection = FeatureCollection(simplified_features)
+    output_file = output_files.get(railway_type)
+    if output_file:
+        with open(output_file, 'w', encoding='utf-8') as f:
+            dump(feature_collection, f, ensure_ascii=False, indent=4)
+        print(f"Data for {railway_type} railways saved to {output_file} with {len(simplified_features)} features")
+
+print("All railway data simplified and saved.")
