@@ -1,0 +1,63 @@
+import requests
+import json
+from geojson import Feature, FeatureCollection, MultiPolygon, Polygon
+
+# Define the Overpass API endpoint
+overpass_url = "http://overpass-api.de/api/interpreter"
+
+# Define the Overpass QL query to get the administrative boundaries and coastline of Denmark
+overpass_query = """
+[out:json][timeout:1800];
+rel["ISO3166-2"~"^DK"]
+   [admin_level=4]
+   [type=boundary]
+   [boundary=administrative];
+out geom;
+"""
+
+# Send the request to the Overpass API
+response = requests.get(overpass_url, params={'data': overpass_query})
+
+# Check if the request was successful
+if response.status_code == 200:
+    # Parse the JSON response
+    data = response.json()
+    print(json.dumps(data, indent=4))  # Print the entire response for debugging
+
+    # Create a list to store GeoJSON features
+    features = []
+
+    # Process each element in the response
+    for element in data['elements']:
+        if element['type'] == 'relation':
+            outer_coordinates = []
+            inner_coordinates = []
+            for member in element['members']:
+                if member['type'] == 'way' and 'geometry' in member:
+                    way_coordinates = [(node['lon'], node['lat']) for node in member['geometry']]
+                    if member['role'] == 'outer':
+                        outer_coordinates.append(way_coordinates)
+                    elif member['role'] == 'inner':
+                        inner_coordinates.append(way_coordinates)
+
+            # Create a polygon or multipolygon depending on the structure
+            if outer_coordinates:
+                if inner_coordinates:
+                    geometry = MultiPolygon([outer_coordinates, inner_coordinates])
+                else:
+                    geometry = MultiPolygon([outer_coordinates])
+                feature = Feature(geometry=geometry, properties={'name': element.get('tags', {}).get('name', 'N/A')})
+                features.append(feature)
+
+    # Create a FeatureCollection
+    feature_collection = FeatureCollection(features)
+
+    # Save the GeoJSON to a file
+    output_file = 'data/data_raw/border.geojson'
+    with open(output_file, 'w', encoding='utf-8') as f:
+        json.dump(feature_collection, f, ensure_ascii=False, indent=4)
+
+    print(f"Data downloaded and saved to {output_file}")
+else:
+    print(f"Error: {response.status_code}")
+    print(response.text)

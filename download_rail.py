@@ -46,7 +46,7 @@ if response.status_code == 200:
     feature_collection = FeatureCollection(features)
 
     # Save the GeoJSON to a file
-    output_file = 'raw_data/denmark_railways.geojson'
+    output_file = 'data_raw/railways.geojson'
     with open(output_file, 'w', encoding='utf-8') as f:
         json.dump(feature_collection, f, ensure_ascii=False, indent=4)
 
