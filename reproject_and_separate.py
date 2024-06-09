@@ -80,14 +80,14 @@ def save_features(reprojected_data, output_path, target_epsg):
         else:
             print(f"No output file specified for feature type: {feature_type}")
 
-def reproject_and_separate(input_file, target_epsg, property_key=None, feature_mapping=None, link_mapping=None, output_directory="data/data_processed"):
+def reproject_and_separate(input_file, target_epsg, property_key=None, feature_mapping=None, link_mapping=None, output_directory="data/data_processed", default_output_file=None):
     if link_mapping is None:
         link_mapping = {}
     if feature_mapping is None:
         feature_mapping = {}
     
     if not feature_mapping:
-        output_path = {'default': os.path.join(output_directory, 'output.geojson')}
+        output_path = {'default': os.path.join(output_directory, default_output_file)}
     else:
         output_path = {key: os.path.join(output_directory, value) for key, value in feature_mapping.items()}
     

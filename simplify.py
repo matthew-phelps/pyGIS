@@ -1,46 +1,77 @@
 import json
-import logging
-from geojson import Feature, FeatureCollection, LineString, dump
-from shapely.geometry import LineString as ShapelyLineString, MultiLineString
-from shapely.ops import linemerge, unary_union
+import os
+from shapely.geometry import shape, mapping, Polygon, MultiPolygon, LineString, MultiLineString
 
-# Configure logging
-logging.basicConfig(level=logging.DEBUG, format='%(levelname)s: %(message)s')
+def simplify_geometry(geometry, tolerance):
+    """
+    Simplify the geometry with the given tolerance.
+    """
+    if isinstance(geometry, (Polygon, MultiPolygon, LineString, MultiLineString)):
+        return geometry.simplify(tolerance, preserve_topology=True)
+    return geometry
 
-def read_geojson(input_file):
-    logging.info(f'Reading data from {input_file}')
-    with open(input_file, 'r', encoding='utf-8') as f:
-        data = json.load(f)
-    return data['features'], data.get('crs')
-
-def simplify_geometries(features):
-    logging.info('Simplifying geometries')
-    lines = [ShapelyLineString(feature['geometry']['coordinates']) for feature in features]
-    merged = linemerge(unary_union(lines))
-    
-    if isinstance(merged, ShapelyLineString):
-        merged = [merged]
-    elif isinstance(merged, MultiLineString):
-        merged = merged.geoms
-    
-    simplified_features = [Feature(geometry=LineString(line.coords), properties={}) for line in merged]
-    logging.debug(f'Simplified {len(features)} features into {len(simplified_features)} features')
+def simplify_features(features, tolerance):
+    """
+    Simplify the features with the given tolerance.
+    """
+    simplified_features = []
+    for feature in features:
+        geom = shape(feature['geometry'])
+        simplified_geom = simplify_geometry(geom, tolerance)
+        feature['geometry'] = mapping(simplified_geom)
+        simplified_features.append(feature)
     return simplified_features
 
-def write_geojson(features, output_file, crs):
-    logging.info(f'Writing data to {output_file}')
-    feature_collection = FeatureCollection(features)
-    if crs:
-        feature_collection['crs'] = crs
+def process_file(input_file, output_file, tolerance):
+    # Read the input GeoJSON file
+    with open(input_file, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+    
+    # Ensure the CRS is EPSG:25832
+    crs = {
+        "type": "name",
+        "properties": {
+            "name": "EPSG:25832"
+        }
+    }
+
+    if 'crs' in data:
+        print(f"Input CRS for {input_file}: {data['crs']}")
+    else:
+        print(f"No CRS found in input {input_file}, assuming EPSG:25832.")
+
+    # Simplify the features
+    simplified_features = simplify_features(data['features'], tolerance)
+    
+    # Prepare the simplified GeoJSON data
+    simplified_geojson = {
+        "type": "FeatureCollection",
+        "features": simplified_features,
+        "crs": crs
+    }
+    
+    # Ensure the output directory exists
+    os.makedirs(os.path.dirname(output_file), exist_ok=True)
+    
+    # Save the simplified GeoJSON to the output file
     with open(output_file, 'w', encoding='utf-8') as f:
-        dump(feature_collection, f, ensure_ascii=False, indent=4)
-    logging.info(f'Data saved to {output_file} with {len(features)} features')
+        json.dump(simplified_geojson, f)
+    
+    print(f"Simplified GeoJSON saved to {output_file}")
 
-def process_osm_line_data(input_files, output_files):
-    for line_type, input_file in input_files.items():
-        features, crs = read_geojson(input_file)
-        simplified_features = simplify_geometries(features)
-        output_file = output_files.get(line_type)
-        if output_file:
-            write_geojson(simplified_features, output_file, crs)
+def main(file_pairs, tolerance):
+    for input_file, output_file in file_pairs:
+        process_file(input_file, output_file, tolerance)
 
+if __name__ == "__main__":
+    # Define the input and output file paths and the simplification tolerance
+    file_pairs = [
+        ("data/data_raw/border.geojson", "data/data_raw/border_simplified.geojson"),
+        ("data/data_raw/motorways.geojson", "data/data_raw/motorways_simplified.geojson"),
+        ("data/data_raw/railways.geojson", "data/data_raw/railways_simplified.geojson")
+        # Add more file pairs as needed
+    ]
+    tolerance = 0.01
+    
+    # Run the main function
+    main(file_pairs, tolerance)
