@@ -10,7 +10,7 @@ output_file_path = os.path.join("data", "data_raw", "landuse.geojson")
 overpass_url = "http://overpass-api.de/api/interpreter"
 overpass_query = """
 [out:xml][timeout:100];
- area(3605175925) -> .area_0;
+area(3601320608) -> .area_0;
 (
     way["landuse"](area.area_0);
     relation["landuse"](area.area_0);
@@ -30,27 +30,21 @@ if response.status_code == 200:
     # Convert the XML to GeoJSON using osm2geojson
     geojson_data = osm2geojson.xml2geojson(xml_data)
 
-    # Filter the GeoJSON to include only polygons and multipolygons
+    # Filter the GeoJSON to include only polygons and multipolygons and include only the "landuse" property
     filtered_features = []
     for feature in geojson_data['features']:
         if feature['geometry']['type'] in ['Polygon', 'MultiPolygon']:
-            # Extract the landuse tag and add it as a new property
-            tags = feature['properties']
+            # Extract the nested tags structure
+            tags = feature['properties'].get('tags', {})
             landuse = tags.get('landuse', None)
-            feature_id = feature.get('id', 'unknown')
 
-            # Debugging information
-            print(f"Before setting landuse_type: Feature ID: {feature_id}, Tags: {tags}")
+            # Create a new properties dictionary with only the "landuse" field
+            new_properties = {}
+            if landuse:
+                new_properties['landuse'] = landuse
 
-            if landuse is None:
-                print(f"Warning: No landuse tag found for feature ID {feature_id}")
-            else:
-                print(f"Feature ID: {feature_id}, Landuse: {landuse}")
-            feature['properties']['landuse_type'] = landuse
-
-            # Debugging information after setting landuse_type
-            print(f"After setting landuse_type: Feature ID: {feature_id}, Tags: {feature['properties']}")
-
+            # Update feature properties with the new properties dictionary
+            feature['properties'] = new_properties
             filtered_features.append(feature)
 
     filtered_geojson_data = {
@@ -66,12 +60,6 @@ if response.status_code == 200:
         json.dump(filtered_geojson_data, file, ensure_ascii=False, indent=4)
 
     print(f"Converted XML to GeoJSON, filtered to polygons, and saved to {output_file_path}")
-
-    # Print the saved GeoJSON data to verify the content
-    with open(output_file_path, "r", encoding="utf-8") as file:
-        data = json.load(file)
-        for feature in data['features']:
-            print(f"Feature ID: {feature.get('id', 'unknown')}, Landuse Type: {feature['properties'].get('landuse_type', 'NULL')}")
 
 else:
     print(f"Error: Overpass API request failed with status code {response.status_code}")
